@@ -2,22 +2,25 @@ import express from "express";
 import * as fs from "fs";
 import path from "path";
 import { v4 as uuidv4 } from "uuid";
-import handleMessage from "./message";
-import handleJoin, { setWelcome, getWelcomeMessages } from "./join";
-import { startDuckDB } from "./duckdb";
+import handleEvent, { recentLookups } from "./message";
+import { explainMessage } from "./lookup";
+import { formatResult } from "./format";
 
-const port = 5051;
+const port = Number(process.env.PORT ?? 5058);
+
+// The Tool Hub has to reach this URL, so set TOOL_URL to your ngrok / Cloudflare tunnel address
+const url = process.env.TOOL_URL ?? `http://localhost:${port}`;
 
 const moduleRegistration = {
-  id: "welcome",
+  id: "wikipedia",
   uuid: uuidv4(),
-  url: `http://localhost:${port}`,
-  emoji: "👋",
-  introduction: "Send !welcome to see your current welcome message, and set a new one.",
-  title: "Welcome Sender",
-  description: "Sends a welcome message to your group when new members join.",
+  url,
+  emoji: "📖",
+  introduction: "React 📖 to any message and I'll reply with a short Wikipedia explanation of what it mentions. React 🔎 to get it privately instead, or send !wiki followed by a term.",
+  title: "Wikipedia Context",
+  description: "Explains people, places, organisations and jargon mentioned in the chat, with a link to Wikipedia.",
   event_types: [
-    "m.room.member", "m.room.message"
+    "m.room.message", "m.reaction"
   ]
 }
 
@@ -28,7 +31,6 @@ function generateRegistrationFile() {
 async function start() {
   const app = express();
   app.use(express.json());
-  await startDuckDB()
 
   app.get("/", async (req, res) => {
     const htmlPath = path.resolve(__dirname, "../web/dist/index.html")
@@ -40,38 +42,35 @@ async function start() {
     const { event, botUserId } = req.body;
 
     console.log("event received", event)
-    let response;
 
-    if (event.type === "m.room.message")
-      response = await handleMessage(event, botUserId);
-
-    if (event.type === "m.room.member" && event.content.membership === "join") {
-      response = await handleJoin(event);
-    }
+    const response = await handleEvent(event, botUserId);
 
     console.log("response", response);
 
     res.send({ success: true, response });
   });
 
-  app.get("/api/welcome", async (req, res) => {
-    const { roomId } = req.query;
+  // Test bench for the dashboard: shows what the bot would reply to a message, and why
+  app.get("/api/lookup", async (req, res) => {
+    const text = String(req.query.text ?? "");
 
-    const welcome = await getWelcomeMessages(roomId as string);
+    try {
+      const { result, candidates } = await explainMessage(text);
 
-    res.send(welcome);
+      res.send({ reply: formatResult(result).message, result, candidates });
+    }
+    catch (err) {
+      console.log(err);
+      res.status(502).send({ error: "Wikipedia request failed" });
+    }
   })
 
-  app.post("/api/welcome", async (req, res) => {
-    const { roomId } = req.query;
-    const { welcomeMessage, directWelcome } = req.body;
-
-    await setWelcome(roomId as string, welcomeMessage, directWelcome);
-
-    res.send({ success: true })
+  app.get("/api/recent", async (req, res) => {
+    res.send(recentLookups);
   })
 
   app.listen(port);
+  console.log(`Wikipedia tool listening on port ${port}, registered at ${url}`);
 };
 
 generateRegistrationFile();

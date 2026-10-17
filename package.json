@@ -1,19 +1,19 @@
 {
-  "name": "welcome-tool",
+  "name": "wikipedia-tool",
   "version": "1.0.0",
-  "description": "Welcome tool for Chat Hackers groups",
+  "description": "Wikipedia context tool for Chat Hackers groups",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
     "build": "npx tsc",
-    "start": "node dist/index.js",
+    "start": "node --env-file-if-exists=.env dist/index.js",
     "dev": "npm run build && npm start",
     "dev-web": "vite web",
-    "build-web": "vite build web"
+    "build-web": "vite build web",
+    "evaluate": "npm run build && node dist/evaluate.js"
   },
   "author": "",
   "license": "ISC",
   "dependencies": {
-    "@duckdb/node-api": "^1.4.1-r.1",
     "express": "^5.1.0",
     "react": "^19.1.1",
     "react-dom": "^19.1.1",

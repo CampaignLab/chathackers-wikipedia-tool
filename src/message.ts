@@ -1,78 +1,125 @@
-import { getWelcomeMessages, setWelcome } from "./join";
+import { explainMessage, explainTerm, explainTitle, LookupResult } from "./lookup";
+import { formatResult } from "./format";
 
-const hello = async (roomId: string) => {
-  const welcomeMessages = await getWelcomeMessages(roomId);
+const PUBLIC_EMOJI = "📖";
+const PRIVATE_EMOJIS = ["🔎", "🔍"];
+const ANSWER_TTL = 24 * 60 * 60 * 1000;
 
-  const responses = [];
+// Messages already explained, so several people reacting to one message only gets one reply.
+// In memory only: a restart forgets them, which is fine for a prototype.
+const answered = new Map<string, number>();
 
-  if (welcomeMessages.group_message && welcomeMessages.group_message !== "") {
-    responses.push({
-      message: `Quote reply to this message to edit the group welcome message. The message is currently: ${welcomeMessages.group_message}`,
-      context: {
-        welcomeWaking: true,
-        directWelcome: false
-      }
-    })
-  }
-  else {
-    responses.push({
-      message: `There is no welcome message sent to the group when new members join. Quote reply to this message to set a new group welcome message.`,
-      context: {
-        welcomeWaking: true,
-        directWelcome: false
-      }
-    })
-  }
+function claim(key: string) {
+    const now = Date.now();
+    answered.forEach((time, existingKey) => {
+        if (now - time > ANSWER_TTL) answered.delete(existingKey);
+    });
 
-  /*
-  if (welcomeMessages.direct_message && welcomeMessages.direct_message !== "") {
-    responses.push({
-      message: `Quote reply to this message to edit the welcome message sent directly to new group members. The message is currently: ${welcomeMessages.direct_message}`,
-      context: {
-        welcomeWaking: true,
-        directWelcome: true
-      }
-    })
-  }
-  else {
-    responses.push({
-      message: `There is no welcome message sent directly to new group members. Quote reply to this message to set a new group welcome message.`,
-      context: {
-        welcomeWaking: true,
-        directWelcome: true
-      }
-    })
-  }
-    */
+    if (answered.has(key)) return false;
 
-  return responses;
-};
+    // claimed before the lookup starts, so reactions arriving at the same moment are also ignored
+    answered.set(key, now);
+    return true;
+}
 
-const handleReply = async (event, botUserId) => {
-  const roomId = event.room_id;
-  const message = event.content.body;
-  const replyText = message.split("\n\n")[1] || message;
-  const prevEvent = event.prevEvent;
+export type RecentLookup = { time: string, roomId: string, trigger: string, kind: string, reply: string };
+export const recentLookups: RecentLookup[] = [];
 
-  if (prevEvent.sender !== botUserId) return;
+function respond(event, trigger: string, result: LookupResult, recipient?: string) {
+    const response: { message: string, context: object, recipient?: string } = formatResult(result);
+    if (recipient) response.recipient = recipient;
 
-  if (!prevEvent.content.context.welcomeWaking) return;
+    recentLookups.unshift({ time: new Date().toISOString(), roomId: event.room_id, trigger, kind: result.kind, reply: response.message });
+    recentLookups.splice(20);
 
-  return setWelcome(roomId, replyText, prevEvent.content.context.directWelcome);
+    return response;
+}
+
+const failure = (recipient?: string) => ({
+    message: "📖 Sorry, I couldn't reach Wikipedia just now. Try again in a moment.",
+    context: {},
+    ...(recipient ? { recipient } : {})
+});
+
+// Reply bodies include the quoted message as "> " lines before the actual reply
+const stripQuote = (body: string) => body
+    .split("\n")
+    .filter(line => !line.trim().startsWith(">"))
+    .join("\n")
+    .trim();
+
+const handleReaction = async (event, botUserId) => {
+    const emoji: string = event.content?.["m.relates_to"]?.key ?? "";
+    const isPrivate = PRIVATE_EMOJIS.some(privateEmoji => emoji.includes(privateEmoji));
+
+    if (!isPrivate && !emoji.includes(PUBLIC_EMOJI)) return;
+
+    const target = event.prevEvent;
+    if (!target || target.type !== "m.room.message" || !target.content?.body) return;
+    if (target.sender === botUserId) return;
+
+    const recipient = isPrivate ? event.sender : undefined;
+    const key = isPrivate ? `${event.room_id}:${target.event_id}:${event.sender}` : `${event.room_id}:${target.event_id}`;
+
+    if (!claim(key)) return;
+
+    try {
+        const { result } = await explainMessage(target.content.body);
+        return respond(event, `${emoji} reaction`, result, recipient);
+    }
+    catch (err) {
+        console.log(err);
+        answered.delete(key);
+        return failure(recipient);
+    }
 };
 
 const handleMessage = async (event, botUserId) => {
-  const message = event.content.body.toLowerCase();
+    const body: string = event.content?.body ?? "";
+    const text = stripQuote(body);
+    const prevEvent = event.prevEvent;
 
-  //if message is a reply, handle reply
-  if (event.content["m.relates_to"]) {
-    return handleReply(event, botUserId);;
-  }
+    try {
+        // reply to one of our numbered lists
+        const listedOptions: string[] = prevEvent?.sender === botUserId ? prevEvent.content?.context?.wikipediaOptions : undefined;
+        if (listedOptions && /^\d+$/.test(text)) {
+            const title = listedOptions[Number(text) - 1];
+            if (!title) return;
 
-  //if message has the tool's wake word, say hello
-  if (message.includes("!welcome")) {
-    return hello(event.room_id);
-  }
+            return respond(event, `reply ${text}`, await explainTitle(title));
+        }
+
+        if (!/^!wiki\b/i.test(text)) return;
+
+        const term = text.replace(/^!wiki\b/i, "").trim();
+        if (term)
+            return respond(event, `!wiki ${term}`, await explainTerm(term));
+
+        // "!wiki" on its own, as a reply to someone's message
+        if (prevEvent?.content?.body && prevEvent.sender !== botUserId) {
+            if (!claim(`${event.room_id}:${prevEvent.event_id}`)) return;
+
+            const { result } = await explainMessage(prevEvent.content.body);
+            return respond(event, "!wiki reply", result);
+        }
+
+        return {
+            message: `📖 React ${PUBLIC_EMOJI} to a message to get a short Wikipedia explanation of what it mentions, or ${PRIVATE_EMOJIS[0]} to get it privately. You can also send "!wiki" followed by a term.`,
+            context: {}
+        };
+    }
+    catch (err) {
+        console.log(err);
+        return failure();
+    }
 };
 
-export default handleMessage;
+const handleEvent = async (event, botUserId) => {
+    if (event.type === "m.reaction")
+        return handleReaction(event, botUserId);
+
+    if (event.type === "m.room.message")
+        return handleMessage(event, botUserId);
+};
+
+export default handleEvent;

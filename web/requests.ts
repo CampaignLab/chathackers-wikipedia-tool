@@ -1,22 +1,16 @@
 const { origin, pathname } = window.location;
-const BASE_URL = `${origin}${pathname}`;
+const BASE_URL = `${origin}${pathname}`.replace(/\/$/, "");
 
-export async function getWelcomeMessage(roomId: string) {
-    const welcomeResponse = await fetch(`${BASE_URL}/api/welcome?roomId=${roomId}`);
-    const welcomeResult = await welcomeResponse.json();
+export async function getLookup(text: string) {
+    const lookupResponse = await fetch(`${BASE_URL}/api/lookup?text=${encodeURIComponent(text)}`);
+    const lookupResult = await lookupResponse.json();
 
-    return welcomeResult;
+    return lookupResult;
 }
 
-export async function postWelcome(roomId: string, welcomeMessage: string, directWelcome: boolean) {
-    return await fetch(`${BASE_URL}/api/welcome?roomId=${roomId}`, {
-        method: "POST",
-        body: JSON.stringify({
-            welcomeMessage,
-            directWelcome
-        }),
-        headers: {
-            "Content-type": "application/json"
-        }
-    })
+export async function getRecent() {
+    const recentResponse = await fetch(`${BASE_URL}/api/recent`);
+    const recentResult = await recentResponse.json();
+
+    return recentResult;
 }
