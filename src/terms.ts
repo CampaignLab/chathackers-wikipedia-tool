@@ -5,7 +5,7 @@
 export type Candidate = {
     term: string;
     prior: number;
-    tier: "quoted" | "name" | "phrase" | "word";
+    tier: "quoted" | "name" | "phrase" | "word" | "suggestion";
 }
 
 // Lowercase words that can sit inside a name: "Bank of England", "Leonardo da Vinci"
@@ -139,6 +139,14 @@ function isOrdinaryWord(word: string) {
         || (/s$/.test(lower) && !/(ss|us|is|ics)$/.test(lower));
 }
 
+// Singular of the last word of a term: "Gorillas" -> "Gorilla", "Tolpuddle Martyrs" -> "Tolpuddle Martyr"
+function singularise(term: string) {
+    return term
+        .replace(/ies$/i, "y")
+        .replace(/(ch|sh|ss|x)es$/i, "$1")
+        .replace(/([^su])s$/i, "$1");
+}
+
 function addLowercaseWord(candidates: Map<string, Candidate>, word: string) {
     if (!isOrdinaryWord(word))
         addCandidate(candidates, { term: word.toLowerCase(), prior: 10, tier: "word" });
@@ -151,6 +159,18 @@ export function extractCandidates(text: string, limit = 50): Candidate[] {
     // Anything in double quotes is almost certainly the thing being asked about
     for (const match of cleaned.matchAll(/["“]([^"“”\n]{2,60})["”]/g))
         addCandidate(candidates, { term: match[1].trim(), prior: 100, tier: "quoted" });
+
+    // A message of only a word or two ("Gorillas", "Tolpuddle Martyrs") is itself the thing being asked about,
+    // so it skips the everyday-word filters. The singular is a fallback for plurals Wikipedia doesn't redirect.
+    const allWords = tokenise(cleaned);
+    if (allWords.length > 0 && allWords.length <= 3) {
+        const whole = allWords.join(" ");
+        addCandidate(candidates, { term: whole, prior: 100, tier: "quoted" });
+
+        const singular = singularise(whole);
+        if (singular !== whole)
+            addCandidate(candidates, { term: singular, prior: 99, tier: "quoted" });
+    }
 
     const sentences = cleaned.split(/[.!?;:()\[\]\n]+|\s[-–—]\s/);
 
@@ -219,5 +239,30 @@ export function extractCandidates(text: string, limit = 50): Candidate[] {
 
     return [...candidates.values()]
         .sort((a, b) => b.prior - a.prior || b.term.length - a.term.length)
+        .slice(0, limit);
+}
+
+// The everyday words extractCandidates sets aside, for when nothing clearly matches. Someone asked about the message,
+// so these are offered as suggestions, never as the answer. Plurals are made singular and come first, since they are
+// usually the nouns ("gorillas" -> "gorilla"); -ly and -ed words come last.
+export function extractSuggestionWords(text: string, limit = 12): string[] {
+    const words = tokenise(cleanMessage(text)).map(word => word.toLowerCase());
+    const suggestions = new Map<string, number>();
+
+    words.forEach(word => {
+        if (word.length < 3 || STOPWORDS.has(word) || COMMON_WORDS.has(word) || /\d/.test(word)) return;
+
+        const singular = singularise(word);
+        const plural = singular !== word;
+        const score = (plural ? 2 : 0) - (/(ly|ed)$/.test(word) ? 2 : 0) + word.length / 100;
+        const term = plural ? singular : word;
+
+        if (!suggestions.has(term) || suggestions.get(term) < score)
+            suggestions.set(term, score);
+    });
+
+    return [...suggestions.entries()]
+        .sort((a, b) => b[1] - a[1])
+        .map(([term]) => term)
         .slice(0, limit);
 }

@@ -35,6 +35,8 @@ The dashboard (`GET /`) has a test bench: type a message and see the reply plus 
 1. `src/terms.ts` pulls candidate terms out of the message: quoted phrases, runs of capitalised words ("Bank of England", "Friends of the Earth"), names followed by lowercase words ("Overton window"), lowercase phrases ("first past the post") and unusual single words ("gerrymandering"). Each gets a priority: quoted > longer names > shorter names > phrases > single words. Filler words and everyday word forms ("apparently", "snacks") are skipped.
 2. `src/wikipedia.ts` checks every candidate against Wikipedia's exact titles and redirects in one request. Only exact titles count, so the bot never replies with a loosely related article.
 3. `src/lookup.ts` explains the highest priority match. Other distinct matches are offered as numbered follow-ups. If the match is a disambiguation page, the reply lists the likeliest meanings from that page instead of picking one.
+4. A message of three words or fewer ("Gorillas") is looked up as a whole, with its singular as a fallback.
+5. If nothing clearly matches, the everyday words that step 1 set aside are looked up (plurals as singulars), and any with articles are offered as numbered suggestions: "I saw gorillas at the zoo" suggests Gorilla, Saw and Zoo. Someone asked about the message, so there is probably a term in it, but the bot doesn't pick one for them.
 
 ## Decisions on the open questions
 

@@ -53,6 +53,13 @@ export function formatResult(result: LookupResult) {
         };
     }
 
+    if (result.kind === "suggestions") {
+        return {
+            message: `📖 Nothing in that message clearly matched a Wikipedia article. Did you mean one of these? Reply with a number:\n${numbered(result.options)}`,
+            context: options(result.options)
+        };
+    }
+
     if (result.term)
         return { message: `📖 I couldn't find a Wikipedia article for "${result.term}".`, context: {} };
 

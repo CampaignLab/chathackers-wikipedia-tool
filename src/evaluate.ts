@@ -7,12 +7,16 @@ import { explainMessage, LookupResult } from "./lookup";
 const describe = (result: LookupResult) => {
     if (result.kind === "match") return result.summary.title;
     if (result.kind === "ambiguous") return `ambiguous (${result.term}: ${result.options.map(option => option.title).join(", ")})`;
+    if (result.kind === "suggestions") return `suggestions (${result.options.map(option => option.title).join(", ")})`;
     return result.kind;
 };
 
 const passes = (result: LookupResult, expect: string) => {
     if (expect === "none") return result.kind === "none";
     if (expect === "ambiguous") return result.kind === "ambiguous";
+    if (expect === "suggestions") return result.kind === "suggestions";
+    if (expect.startsWith("suggest:"))
+        return result.kind === "suggestions" && result.options.some(option => option.title === expect.slice("suggest:".length));
     return result.kind === "match" && result.summary.title === expect;
 };
 

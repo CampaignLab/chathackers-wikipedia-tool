@@ -1,4 +1,4 @@
-import { extractCandidates, Candidate } from "./terms";
+import { extractCandidates, extractSuggestionWords, Candidate } from "./terms";
 import { lookupTitles, searchPages, getLinkedPages, getSummary, PageInfo, Summary } from "./wikipedia";
 
 export type FoundCandidate = Candidate & { page?: PageInfo };
@@ -7,6 +7,7 @@ export type LookupResult =
     | { kind: "match", term: string, summary: Summary, others: PageInfo[] }
     | { kind: "ambiguous", term: string, options: PageInfo[], disambiguationUrl?: string, others: PageInfo[] }
     | { kind: "closest", term: string, options: PageInfo[] }
+    | { kind: "suggestions", options: PageInfo[] }
     | { kind: "none", term?: string };
 
 const MAX_OPTIONS = 4;
@@ -52,6 +53,28 @@ async function resultForPage(term: string, page: PageInfo, others: PageInfo[] = 
     return { kind: "match", term, summary: await getSummary(page.title), others };
 }
 
+// Nothing clearly matched, but someone asked about this message, so there's probably a term in it.
+// Offer the everyday words that have articles as numbered suggestions rather than picking one.
+async function suggestFromEverydayWords(text: string, debug: FoundCandidate[]) {
+    const words = extractSuggestionWords(text);
+    const pages = await lookupTitles(words);
+
+    const options: PageInfo[] = [];
+    words.forEach(word => {
+        const page = pages.get(word);
+        debug.push({ term: word, prior: 0, tier: "suggestion", page });
+
+        if (!page || page.disambiguation || options.length >= MAX_OPTIONS) return;
+        if (options.some(option => option.title === page.title)) return;
+
+        options.push(page);
+    });
+
+    const result: LookupResult = options.length > 0 ? { kind: "suggestions", options } : { kind: "none" };
+
+    return { result, candidates: debug };
+}
+
 // Explains the most relevant term in a chat message. Only exact article titles (and their redirects) count,
 // so the bot says it found nothing rather than picking a loosely related article.
 export async function explainMessage(text: string) {
@@ -63,10 +86,10 @@ export async function explainMessage(text: string) {
         // a lone ordinary word that lands on a disambiguation page is just an everyday word
         .filter(candidate => candidate.page && !(candidate.tier === "word" && candidate.page.disambiguation));
 
-    const debug = candidates.map(candidate => ({ ...candidate, page: pages.get(candidate.term) }));
+    const debug: FoundCandidate[] = candidates.map(candidate => ({ ...candidate, page: pages.get(candidate.term) }));
 
     if (found.length === 0)
-        return { result: { kind: "none" } as LookupResult, candidates: debug };
+        return suggestFromEverydayWords(text, debug);
 
     const [chosen, ...rest] = found;
 

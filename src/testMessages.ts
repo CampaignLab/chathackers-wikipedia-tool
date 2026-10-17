@@ -1,8 +1,9 @@
 // Test messages for checking the bot picks the right term and the right article.
-// expect: the article title it should explain, "ambiguous" if it should offer options, or "none".
+// expect: the article title it should explain, "ambiguous" if it should offer meanings, "suggestions" if it should
+// offer suggestions ("suggest:Title" if they must include that article), or "none".
 
 export type TestMessage = {
-    category: "person" | "place" | "organisation" | "jargon" | "ambiguous" | "none";
+    category: "person" | "place" | "organisation" | "jargon" | "short" | "ambiguous" | "suggestions" | "none";
     text: string;
     expect: string;
 }
@@ -22,6 +23,10 @@ const testMessages: TestMessage[] = [
     { category: "organisation", text: "is the NHS going to be part of the manifesto?", expect: "National Health Service" },
     { category: "organisation", text: "There's a good report from the Bank of England on inflation", expect: "Bank of England" },
 
+    { category: "short", text: "Gorillas", expect: "Gorilla" },
+    { category: "short", text: "gorillas", expect: "Gorilla" },
+    { category: "short", text: "Tolpuddle Martyrs", expect: "Tolpuddle Martyrs" },
+
     { category: "jargon", text: "This is basically gerrymandering isn't it", expect: "Gerrymandering" },
     { category: "jargon", text: "the problem with first past the post is wasted votes", expect: "First-past-the-post voting" },
     { category: "jargon", text: "we need to talk about participatory budgeting at the next meeting", expect: "Participatory budgeting" },
@@ -36,10 +41,14 @@ const testMessages: TestMessage[] = [
     { category: "ambiguous", text: "John Smith was a great leader", expect: "ambiguous" },
     { category: "ambiguous", text: "Is anyone going to Cambridge on Saturday?", expect: "Cambridge" },
 
-    { category: "none", text: "See you all at the meeting tomorrow, bring snacks", expect: "none" },
+    // No clear match: everyday words with articles are offered as suggestions, never as the answer
+    { category: "suggestions", text: "I saw gorillas at the zoo", expect: "suggest:Gorilla" },
+    { category: "suggestions", text: "we spotted some hedgehogs and badgers last night", expect: "suggest:Hedgehog" },
+    { category: "suggestions", text: "See you all at the meeting tomorrow, bring snacks", expect: "suggest:Snack" },
+    { category: "suggestions", text: "Can someone send me the link to the doc again?", expect: "suggestions" },
+    { category: "suggestions", text: "Running about 10 minutes late, start without me", expect: "suggestions" },
+
     { category: "none", text: "lol yeah that's exactly what I meant", expect: "none" },
-    { category: "none", text: "Can someone send me the link to the doc again?", expect: "none" },
-    { category: "none", text: "Running about 10 minutes late, start without me", expect: "none" },
 ];
 
 export default testMessages;
