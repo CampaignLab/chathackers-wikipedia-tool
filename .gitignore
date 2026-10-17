@@ -1,5 +1,6 @@
 # Generated Files
 wikipedia.json
+answered.json
 *.db
 *.db.wal
 

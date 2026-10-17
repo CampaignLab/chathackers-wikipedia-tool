@@ -34,6 +34,7 @@ const testMessages: TestMessage[] = [
 
     { category: "organisation", text: "Shall we invite someone from Greenpeace and Friends of the Earth?", expect: "Friends of the Earth" },
     { category: "jargon", text: "the Overton window has shifted a lot", expect: "Overton window" },
+    { category: "organisation", text: "political systems are comprised of many different voting systems like proportional representation, alternative vote and many others. The German social Democratic Party thrives in this system.", expect: "Social Democratic Party of Germany" },
     { category: "jargon", text: "anyone know much about universal basic income?", expect: "Universal basic income" },
 
     { category: "ambiguous", text: "Mercury is in retrograde apparently", expect: "ambiguous" },

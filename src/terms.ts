@@ -140,7 +140,7 @@ function isOrdinaryWord(word: string) {
 }
 
 // Singular of the last word of a term: "Gorillas" -> "Gorilla", "Tolpuddle Martyrs" -> "Tolpuddle Martyr"
-function singularise(term: string) {
+export function singularise(term: string) {
     return term
         .replace(/ies$/i, "y")
         .replace(/(ch|sh|ss|x)es$/i, "$1")
@@ -215,6 +215,28 @@ export function extractCandidates(text: string, limit = 50): Candidate[] {
 
                 for (let length = 1; length <= run.tail.length; length++) {
                     const span = [...ending, ...run.tail.slice(0, length)];
+                    addCandidate(candidates, { term: span.join(" "), prior: 50 + 10 * span.length, tier: "name" });
+                }
+            }
+        });
+
+        // A lowercase word between capitalised ones can be part of the name, typed carelessly:
+        // "German social Democratic Party" is also tried as "German Social Democratic Party"
+        words.forEach((word, i) => {
+            if (isCapitalised(word) || isStopword(word) || CONNECTORS.has(word)) return;
+            if (i === 0 || !isCapitalised(words[i - 1]) || !isCapitalised(words[i + 1] ?? "")) return;
+
+            let leftStart = i - 1;
+            while (leftStart > 0 && i - leftStart < 3 && isCapitalised(words[leftStart - 1])) leftStart--;
+            let rightEnd = i + 1;
+            while (rightEnd + 1 < words.length && rightEnd - i < 3 && isCapitalised(words[rightEnd + 1])) rightEnd++;
+
+            const bridged = word[0].toUpperCase() + word.slice(1);
+            for (let from = leftStart; from <= i; from++) {
+                for (let to = i + 1; to <= rightEnd; to++) {
+                    const span = [...words.slice(from, i), bridged, ...words.slice(i + 1, to + 1)];
+                    if (isStopword(span[0]) || isStopword(span[span.length - 1])) continue;
+
                     addCandidate(candidates, { term: span.join(" "), prior: 50 + 10 * span.length, tier: "name" });
                 }
             }

@@ -26,13 +26,17 @@ const numbered = (pages: PageInfo[]) => pages
 
 const options = (pages: PageInfo[]) => ({ wikipediaOptions: pages.map(page => page.title) });
 
+// "Instant-runoff voting (alternative vote)", so people can see which part of the message it explains
+const titleWithMention = (page: { title: string, mentionedAs?: string }) =>
+    page.mentionedAs ? `${page.title} (${page.mentionedAs})` : page.title;
+
 export function formatResult(result: LookupResult) {
     if (result.kind === "match") {
         const { summary, others } = result;
-        let message = `📖 ${summary.title}\n${shortExtract(summary.extract)}\n${summary.url}`;
+        let message = `📖 ${titleWithMention(summary)}\n${shortExtract(summary.extract)}\n${summary.url}`;
 
         if (others.length > 0)
-            message += `\n\nAlso mentioned, reply with a number to look one up:\n${others.map((page, i) => `${i + 1}. ${page.title}`).join("\n")}`;
+            message += `\n\nAlso mentioned, reply with a number to look one up:\n${others.map((page, i) => `${i + 1}. ${titleWithMention(page)}`).join("\n")}`;
 
         return { message, context: options(others) };
     }

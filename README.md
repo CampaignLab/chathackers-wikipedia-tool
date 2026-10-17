@@ -42,8 +42,8 @@ The dashboard (`GET /`) has a test bench: type a message and see the reply plus 
 
 - **Trigger:** emoji reaction, because it works on any message without typing, plus `!wiki` for when the bot can't find the right term.
 - **Several keywords:** the priority order above, with the runners-up offered as follow-ups.
-- **Where the reply goes:** the group by default, privately with 🔎. The Tool Hub sends replies as plain messages, so threaded replies aren't possible without changing the Hub.
-- **Repeated reactions:** each message is explained in the group once (for 24 hours). Private requests are tracked per person. This is kept in memory, so a restart forgets it.
+- **Where the reply goes:** the group by default, privately with 🔎. WhatsApp has no threads, so the closest thing is a quoted reply. Each response includes `replyTo` (the id of the message it answers), but the current Tool Hub sends every reply as a plain message, so for now the reply starts with a quote of the post: `Re: "I saw gorillas at the zoo"`. Once the Hub sends `replyTo` as a real reply, set `HUB_QUOTE_REPLIES=true` to drop the quote line.
+- **Repeated reactions:** each message is explained in the group once (for 24 hours), however many people react. Private requests are tracked per person. This is saved to `answered.json` (or `DATA_DIR/answered.json`), so restarts don't forget it.
 
 ## Known limitations
 
